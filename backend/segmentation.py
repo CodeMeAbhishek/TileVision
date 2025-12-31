@@ -214,7 +214,9 @@ class FloorSegmenter:
             except Exception as e:
                 logger.error(f"SAM API attempt {attempt + 1} failed: {str(e)}")
                 if attempt < max_retries:
-                    time.sleep(2)  # Wait before retry
+                    wait_time = 2 * (2 ** attempt)  # Exponential backoff: 2, 4, 8 seconds
+                    logger.warning(f"Rate limited or failed. Waiting {wait_time}s before retry...")
+                    time.sleep(wait_time) 
                     continue
                 else:
                     # Final attempt failed - Propagate error to user

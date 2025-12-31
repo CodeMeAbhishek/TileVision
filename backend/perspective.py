@@ -107,7 +107,7 @@ class PerspectiveCorrector:
         self, 
         tile_image: np.ndarray, 
         dimensions: tuple[int, int],
-        tile_size_px: int = 100
+        tile_size_px: int = 350
     ) -> np.ndarray:
         """
         Create repeating tile pattern
@@ -122,7 +122,12 @@ class PerspectiveCorrector:
         width, height = dimensions
         
         # Resize single tile to tile_size_px x tile_size_px
-        tile_resized = cv2.resize(tile_image, (tile_size_px, tile_size_px))
+        # Use LANCZOS4 for highest quality resize
+        tile_resized = cv2.resize(
+            tile_image, 
+            (tile_size_px, tile_size_px),
+            interpolation=cv2.INTER_LANCZOS4
+        )
         
         # Calculate how many tiles needed
         tiles_x = int(np.ceil(width / tile_size_px)) + 1
@@ -152,11 +157,12 @@ class PerspectiveCorrector:
         # Warp tile pattern from rectangle to floor perspective
         inverse_transform = np.linalg.inv(transform)
         
+        # Use INTER_LANCZOS4 for highest quality texture preservation
         warped_tiles = cv2.warpPerspective(
             tile_pattern,
             inverse_transform,
             (original.shape[1], original.shape[0]),
-            flags=cv2.INTER_LINEAR,
+            flags=cv2.INTER_LANCZOS4,  # Best quality for texture detail
             borderMode=cv2.BORDER_CONSTANT,
             borderValue=(0, 0, 0)
         )
@@ -170,12 +176,11 @@ class PerspectiveCorrector:
         # Normalize mask to 0-1 range
         mask_norm = mask_3ch.astype(np.float32) / 255.0
         
-        # Blend: original image where mask=0, warped tiles where mask=1
-        # Also blend lighting from original for realism
+        # Simple alpha compositing - preserves true tile colors
+        # No shadow multiplication to avoid darkening the texture
         result = (
-            warped_tiles * mask_norm * 0.95 +  # 95% tiles
-            original * mask_norm * 0.05 +       # 5% original lighting
-            original * (1 - mask_norm)          # Keep non-floor areas
+            warped_tiles.astype(np.float32) * mask_norm +  # New tiles on floor
+            original.astype(np.float32) * (1 - mask_norm)  # Keep non-floor areas
         ).astype(np.uint8)
         
         return result
@@ -252,7 +257,7 @@ class PerspectiveCorrector:
         pixels_per_foot: int = 50
     ) -> np.ndarray:
         """
-        Complete pipeline: perspective-corrected tile application
+        Direct texture overlay - preserves exact catalog appearance
         
         Args:
             original_image: Original room photo
@@ -261,35 +266,70 @@ class PerspectiveCorrector:
             tile_size_feet: Real-world tile dimensions (width, height) in feet
             pixels_per_foot: Scale factor for tile size
         
-        Returns: Final visualization
+        Returns: Final visualization with exact catalog tiles
         """
         try:
-            # Step 0: Improve mask quality with edge awareness
+            # Step 0: Improve mask quality
             floor_mask = self._improve_mask(floor_mask, original_image)
             
-            # Step 1: Find floor corners
-            corners = self.find_floor_corners(floor_mask)
+            # Step 1: Find floor bounding box (instead of corners)
+            contours, _ = cv2.findContours(
+                floor_mask, 
+                cv2.RETR_EXTERNAL, 
+                cv2.CHAIN_APPROX_SIMPLE
+            )
             
-            # Step 2: Calculate perspective transform
-            transform, rect_dims = self.calculate_homography(corners)
+            if not contours:
+                logger.warning("No floor contours found, using fallback")
+                return self._simple_overlay(original_image, floor_mask, tile_image)
             
-            # Step 3: Calculate tile size in pixels
+            # Get bounding rectangle
+            largest_contour = max(contours, key=cv2.contourArea)
+            x, y, w, h = cv2.boundingRect(largest_contour)
+            
+            # Step 2: Calculate tile size in pixels
             tile_size_px = int(max(tile_size_feet) * pixels_per_foot)
             
-            # Step 4: Create tile pattern in rectangular space
-            tile_pattern = self.create_tile_pattern(
+            # Step 3: Create seamless tile pattern fitted to floor size
+            # Calculate how many tiles needed
+            tiles_x = int(np.ceil(w / tile_size_px)) + 1
+            tiles_y = int(np.ceil(h / tile_size_px)) + 1
+            
+            # Resize single tile with highest quality
+            tile_resized = cv2.resize(
                 tile_image,
-                rect_dims,
-                tile_size_px
+                (tile_size_px, tile_size_px),
+                interpolation=cv2.INTER_LANCZOS4
             )
             
-            # Step 5: Apply tiles with perspective correction
-            result = self.apply_tiles(
-                original_image,
-                floor_mask,
-                tile_pattern,
-                transform
-            )
+            # Create pattern by tiling
+            row = np.hstack([tile_resized] * tiles_x)
+            tile_pattern = np.vstack([row] * tiles_y)
+            
+            # Crop to exact floor size
+            tile_pattern = tile_pattern[:h, :w]
+            
+            # Step 4: Create canvas and place pattern
+            canvas = np.zeros_like(original_image)
+            canvas[y:y+h, x:x+w] = tile_pattern
+            
+            # Step 5: Simple alpha blend (no color manipulation)
+            # Normalize mask to 0-1 range
+            if len(floor_mask.shape) == 2:
+                mask_3ch = cv2.cvtColor(floor_mask, cv2.COLOR_GRAY2BGR)
+            else:
+                mask_3ch = floor_mask
+            
+            mask_norm = mask_3ch.astype(np.float32) / 255.0
+            
+            # Direct alpha compositing - preserves exact tile colors
+            result = (
+                canvas.astype(np.float32) * mask_norm +
+                original_image.astype(np.float32) * (1 - mask_norm)
+            ).astype(np.uint8)
+            
+            logger.info(f"Applied tiles directly: {tiles_x}x{tiles_y} tiles, " 
+                       f"pattern size: {tile_pattern.shape}")
             
             return result
             
