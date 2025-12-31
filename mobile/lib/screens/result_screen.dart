@@ -132,95 +132,90 @@ class _ResultScreenState extends State<ResultScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Result image (full screen)
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              color: Colors.black,
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 4.0,
-                child: Image.memory(
-                  base64Decode(widget.resultImageBase64),
-                  fit: BoxFit.contain,
+      body: Container(
+        width: double.infinity,
+        color: Colors.black,
+        child: InteractiveViewer(
+          minScale: 0.5,
+          maxScale: 4.0,
+          child: Image.memory(
+            base64Decode(widget.resultImageBase64),
+            fit: BoxFit.contain,
+          ),
+        ),
+      ),
+      bottomNavigationBar: Material(
+        elevation: 8,
+        color: Colors.white,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // Save to gallery
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: _isSaving
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_alt),
+                      iconSize: 28,
+                      color: Colors.blue,
+                      onPressed: _isSaving ? null : _saveToGallery,
+                      tooltip: 'Save to Gallery',
+                    ),
+                    const Text(
+                      'Save',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ],
                 ),
-              ),
+
+                // Share
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.share),
+                      iconSize: 28,
+                      color: Colors.green,
+                      onPressed: _shareImage,
+                      tooltip: 'Share',
+                    ),
+                    const Text(
+                      'Share',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ],
+                ),
+
+                // Try another tile
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.grid_on),
+                      iconSize: 28,
+                      color: Colors.orange,
+                      onPressed: _tryAnotherTile,
+                      tooltip: 'Try Another Tile',
+                    ),
+                    const Text(
+                      'Try Another',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-
-          // Bottom action bar
-          SafeArea(
-            child: BottomAppBar(
-              elevation: 8,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // Save to gallery
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: _isSaving
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.save_alt),
-                        iconSize: 28,
-                        color: Colors.blue,
-                        onPressed: _isSaving ? null : _saveToGallery,
-                        tooltip: 'Save to Gallery',
-                      ),
-                      const Text(
-                        'Save',
-                        style: TextStyle(fontSize: 11),
-                      ),
-                    ],
-                  ),
-
-                  // Share
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.share),
-                        iconSize: 28,
-                        color: Colors.green,
-                        onPressed: _shareImage,
-                        tooltip: 'Share',
-                      ),
-                      const Text(
-                        'Share',
-                        style: TextStyle(fontSize: 11),
-                      ),
-                    ],
-                  ),
-
-                  // Try another tile
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.grid_on),
-                        iconSize: 28,
-                        color: Colors.orange,
-                        onPressed: _tryAnotherTile,
-                        tooltip: 'Try Another Tile',
-                      ),
-                      const Text(
-                        'Try Another',
-                        style: TextStyle(fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -12,7 +12,7 @@ class ApiService {
   final String baseUrl;
   
   // Request timeout duration (increased for AI segmentation which can take 60-90s)
-  static const Duration _timeout = Duration(seconds: 120);
+  static const Duration _timeout = Duration(seconds: 300);
 
   ApiService({this.baseUrl = _defaultBaseUrl});
 
@@ -74,17 +74,87 @@ class ApiService {
     }
   }
 
-  /// Apply tile pattern to floor area
+  /// Apply tile pattern to floor with optional AI enhancement
   /// 
-  /// Returns base64 encoded JPEG of the result image
-  Future<String> applyTile(
+  /// Parameters:
+  /// - useAIEnhancement: Enable ControlNet realistic lighting (default: false)
+  /// - aiStrength: AI modification strength, 0.2-0.4 (default: 0.3)
+  /// - aiBlend: Blend ratio, 0.0-1.0 (default: 0.5)
+  /// 
+  /// Returns base64 encoded JPEG of result image, or null on error
+  Future<String?> applyTile(
     File originalImage,
     String maskBase64,
     File tileImage,
-    String tileSize,
+    String tileSize, {
+    bool useAIEnhancement = false,
+    double aiStrength = 0.3,
+    double aiBlend = 0.5,
+  }) async {
+    try {
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/api/apply-tile'),
+      );
+      
+      // Add files
+      request.files.add(await http.MultipartFile.fromPath(
+        'original_image',
+        originalImage.path,
+        contentType: MediaType('image', 'jpeg'),
+      ));
+      
+      // Decode and add mask
+      final maskBytes = base64Decode(maskBase64);
+      request.files.add(http.MultipartFile.fromBytes(
+        'floor_mask',
+        maskBytes,
+        filename: 'mask.png',
+        contentType: MediaType('image', 'png'),
+      ));
+      
+      request.files.add(await http.MultipartFile.fromPath(
+        'tile_image',
+        tileImage.path,
+        contentType: MediaType('image', 'png'),
+      ));
+      
+      // Add parameters
+      request.fields['tile_size'] = tileSize;
+      request.fields['use_ai_enhancement'] = useAIEnhancement.toString();
+      request.fields['ai_strength'] = aiStrength.toString();
+      request.fields['ai_blend'] = aiBlend.toString();
+      
+      // Send with longer timeout for AI processing (5 minutes)
+      final streamedResponse = await request.send().timeout(
+        Duration(seconds: useAIEnhancement ? 300 : 60),
+      );
+      
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['result_image'];
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error applying tile: $e');
+      rethrow;
+    }
+  }
+
+  /// Apply tile using AI-powered image-guided inpainting
+  /// This provides photorealistic results but takes longer (~10-15 seconds)
+  /// 
+  /// Returns base64 encoded JPEG of the result image
+  Future<String> applyTileAI(
+    File originalImage,
+    String maskBase64,
+    File tileImage,
   ) async {
     try {
-      final uri = Uri.parse('$baseUrl/api/apply-tile');
+      final uri = Uri.parse('$baseUrl/api/apply_tile_ai');
       
       var request = http.MultipartRequest('POST', uri);
       
@@ -110,12 +180,11 @@ class ApiService {
         tileImage.path,
         contentType: MediaType('image', 'png'),
       ));
-      
-      // Add tile size
-      request.fields['tile_size'] = tileSize;
 
-      // Send request with timeout
-      final streamedResponse = await request.send().timeout(_timeout);
+      // Send request with extended timeout for AI processing
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 60), // AI needs more time
+      );
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
@@ -123,14 +192,14 @@ class ApiService {
         return data['result_image'];
       } else {
         throw ApiException(
-          'Tile application failed: ${response.statusCode}',
+          'AI tile application failed: ${response.statusCode}',
           response.body,
         );
       }
     } on TimeoutException {
       throw ApiException(
-        'Request timeout',
-        'The server took too long to respond. Please try again.',
+        'AI processing timeout',
+        'AI took too long. Falling back to standard method.',
       );
     } on SocketException {
       throw ApiException(
@@ -139,9 +208,54 @@ class ApiService {
       );
     } catch (e) {
       throw ApiException(
-        'Tile application error',
+        'AI tile application error',
         e.toString(),
       );
+    }
+  }
+
+
+  /// Replace material using IP-Adapter for hyper-realistic results
+  Future<String> replaceMaterial(
+    File originalImage,
+    String maskBase64,
+    File tileImage,
+  ) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/replace-material');
+      var request = http.MultipartRequest('POST', uri);
+      
+      request.files.add(await http.MultipartFile.fromPath(
+        'image',
+        originalImage.path,
+        contentType: MediaType('image', 'jpeg'),
+      ));
+      
+      final maskBytes = base64Decode(maskBase64);
+      request.files.add(http.MultipartFile.fromBytes(
+        'mask',
+        maskBytes,
+        filename: 'mask.png',
+        contentType: MediaType('image', 'png'),
+      ));
+      
+      request.files.add(await http.MultipartFile.fromPath(
+        'tile',
+        tileImage.path,
+        contentType: MediaType('image', 'png'),
+      ));
+      
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['result_image'];
+      } else {
+        throw ApiException('Material replacement failed: ${response.statusCode}', response.body);
+      }
+    } catch (e) {
+      throw ApiException('AI Material error', e.toString());
     }
   }
 

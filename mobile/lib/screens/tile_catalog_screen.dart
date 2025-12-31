@@ -26,6 +26,9 @@ class _TileCatalogScreenState extends State<TileCatalogScreen> {
   Tile? _selectedTile;
   bool _isLoading = false;
   bool _isApplyingTile = false;
+  // AI enhancements are always ON for best quality
+  static const bool _useAIEnhancement = true;
+  static const bool _useMaterialReplacement = true;
 
   @override
   void initState() {
@@ -63,13 +66,11 @@ class _TileCatalogScreenState extends State<TileCatalogScreen> {
     }
   }
 
+
   Future<void> _applyTile() async {
     if (_selectedTile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a tile first'),
-          backgroundColor: Colors.orange,
-        ),
+        const SnackBar(content: Text('Please select a tile first')),
       );
       return;
     }
@@ -84,30 +85,40 @@ class _TileCatalogScreenState extends State<TileCatalogScreen> {
         context: context,
         barrierDismissible: false,
         builder: (BuildContext context) {
-          return const AlertDialog(
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text(
-                  'Applying perspective correction...',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Creating photorealistic preview...',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Almost done! (1-2 seconds)',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: Colors.grey),
-                ),
-              ],
+          return PopScope(
+            canPop: false,
+            child: AlertDialog(
+              content: const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text(
+                    'Applying AI-Enhanced Tile...',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'This may take 1-2 minutes',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  Text('• Creating material map...',
+                      style: TextStyle(fontSize: 13)),
+                  SizedBox(height: 4),
+                  Text('• AI texture transfer...',
+                      style: TextStyle(fontSize: 13)),
+                  SizedBox(height: 4),
+                  Text('• Finalizing photorealistic result...',
+                      style: TextStyle(fontSize: 13)),
+                ],
+              ),
             ),
           );
         },
@@ -128,15 +139,31 @@ class _TileCatalogScreenState extends State<TileCatalogScreen> {
       final tileFile = File('${tempDir.path}/temp_tile_${DateTime.now().millisecondsSinceEpoch}.png');
       await tileFile.writeAsBytes(tileResponse.bodyBytes);
       
-      final resultImageBase64 = await _apiService.applyTile(
-        File(widget.imagePath),
-        widget.maskBase64,
-        tileFile, // Now passing the actual downloaded tile image
-        _selectedTile!.size,
-      );
+      String? resultImageBase64;
+      
+      // Extended timeout handling is now in ApiService
+      if (_useAIEnhancement && _useMaterialReplacement) {
+        // Use new IP-Adapter Material Replacement (Nano Banana Pro)
+        resultImageBase64 = await _apiService.replaceMaterial(
+          File(widget.imagePath),
+          widget.maskBase64,
+          tileFile,
+        );
+      } else {
+        // Use existing method (Standard or ControlNet)
+        resultImageBase64 = await _apiService.applyTile(
+          File(widget.imagePath),
+          widget.maskBase64,
+          tileFile,
+          _selectedTile!.size,
+          useAIEnhancement: _useAIEnhancement,
+        );
+      }
 
       // Clean up temp file
-      await tileFile.delete();
+      if (await tileFile.exists()) {
+        await tileFile.delete();
+      }
 
       if (mounted) {
         // Close progress dialog
@@ -145,22 +172,35 @@ class _TileCatalogScreenState extends State<TileCatalogScreen> {
         setState(() {
           _isApplyingTile = false;
         });
-
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ResultScreen(
-              resultImageBase64: resultImageBase64,
-              originalImagePath: widget.imagePath,
-              maskBase64: widget.maskBase64,
+      
+        if (resultImageBase64 != null && resultImageBase64.isNotEmpty) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ResultScreen(
+                resultImageBase64: resultImageBase64!,
+                originalImagePath: widget.imagePath,
+                maskBase64: widget.maskBase64,
+              ),
             ),
-          ),
-        );
+          );
+        } else {
+          // Show error if result is null
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to apply tile. The server returned no image.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
+      debugPrint('Error applying tile: $e');
       if (mounted) {
-        // Close progress dialog
-        Navigator.of(context).pop();
+        // Close progress dialog if context is still valid
+        if (Navigator.canPop(context)) {
+           Navigator.of(context).pop();
+        }
         
         setState(() {
           _isApplyingTile = false;
@@ -168,8 +208,9 @@ class _TileCatalogScreenState extends State<TileCatalogScreen> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to apply tile: ${e.toString()}'),
+            content: Text('Failed to apply tile: ${e.toString().replaceAll("Exception: ", "")}'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }

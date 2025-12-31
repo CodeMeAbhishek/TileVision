@@ -45,7 +45,39 @@ class _FloorSelectionScreenState extends State<FloorSelectionScreen> {
         _imageWidth = image.width;
         _imageHeight = image.height;
       });
+
+      // Auto-trigger detection after layout is built
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _autoDetectFloor();
+      });
     }
+  }
+
+  void _autoDetectFloor() {
+    // Heuristic: Floor is usually in the bottom-center 
+    // We need to account for BoxFit.contain letterboxing
+    
+    final RenderBox? renderBox = _imageKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || _imageWidth == null || _imageHeight == null) return;
+    
+    final widgetSize = renderBox.size;
+    
+    // Calculate where the image is actually rendered (accounting for letterboxing)
+    final imageDisplayRect = _getImageDisplayRect(widgetSize);
+    if (imageDisplayRect == null) return;
+    
+    // Pick a point in the bottom-center of the ACTUAL IMAGE (not widget)
+    // 50% horizontal, 75% vertical within the rendered image
+    final autoPoint = Offset(
+      imageDisplayRect.left + (imageDisplayRect.width * 0.5),
+      imageDisplayRect.top + (imageDisplayRect.height * 0.75),
+    );
+    
+    setState(() {
+      _selectedPoint = autoPoint;
+    });
+    
+    _detectFloor();
   }
 
   Offset? _transformCoordinates(Offset localPosition, Size widgetSize) {
@@ -80,15 +112,7 @@ class _FloorSelectionScreenState extends State<FloorSelectionScreen> {
   }
 
   Future<void> _detectFloor() async {
-    if (_selectedPoint == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please tap on the floor area first'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
+    if (_selectedPoint == null) return;
 
     // Get current widget size
     final RenderBox? renderBox = _imageKey.currentContext?.findRenderObject() as RenderBox?;
@@ -111,6 +135,7 @@ class _FloorSelectionScreenState extends State<FloorSelectionScreen> {
 
     setState(() {
       _isLoading = true;
+      _maskBase64 = null; // Clear any existing mask while loading new one
     });
 
     try {
@@ -128,7 +153,8 @@ class _FloorSelectionScreenState extends State<FloorSelectionScreen> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Floor detected with ${(_confidence! * 100).toStringAsFixed(1)}% confidence'),
+            content: Text('Floor detected! Tap elsewhere to correct if needed.'),
+            duration: const Duration(seconds: 2),
             backgroundColor: Colors.green,
           ),
         );
@@ -203,7 +229,7 @@ class _FloorSelectionScreenState extends State<FloorSelectionScreen> {
             padding: const EdgeInsets.all(16),
             color: Colors.blue.shade50,
             child: const Text(
-              'Tap on the floor area to select it, then click "Detect Floor"',
+              'AI auto-detects the floor. Tap elsewhere to correct if needed.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -220,10 +246,13 @@ class _FloorSelectionScreenState extends State<FloorSelectionScreen> {
                   children: [
                     GestureDetector(
                       onTapDown: (details) {
+                        // Update point immediately (visual feedback)
                         setState(() {
                           _selectedPoint = details.localPosition;
-                          _maskBase64 = null; // Clear previous mask
                         });
+                        
+                        // Auto-trigger re-detection when user taps
+                        _detectFloor();
                       },
                       child: Container(
                         width: double.infinity,
@@ -309,7 +338,7 @@ class _FloorSelectionScreenState extends State<FloorSelectionScreen> {
             ),
           ),
 
-          // Bottom buttons
+          // Bottom button - Only Confirm (auto-detect handles detection)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -322,33 +351,26 @@ class _FloorSelectionScreenState extends State<FloorSelectionScreen> {
                 ),
               ],
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _detectFloor,
-                    icon: const Icon(Icons.search),
-                    label: const Text('Detect Floor'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: Colors.blue,
-                    ),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _maskBase64 == null || _isLoading ? null : _confirmAndProceed,
+                icon: const Icon(Icons.check_circle),
+                label: Text(
+                  _maskBase64 == null 
+                    ? 'Detecting floor...' 
+                    : 'Continue with Selection',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  backgroundColor: Colors.green,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _maskBase64 == null || _isLoading ? null : _confirmAndProceed,
-                    icon: const Icon(Icons.check),
-                    label: const Text('Confirm'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: Colors.green,
-                      disabledBackgroundColor: Colors.grey,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],

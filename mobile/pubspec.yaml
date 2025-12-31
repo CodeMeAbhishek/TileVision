@@ -39,3 +39,4 @@ flutter:
   # Assets
   assets:
     - assets/
+    - assets/tiles/
