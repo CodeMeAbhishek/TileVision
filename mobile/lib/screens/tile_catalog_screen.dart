@@ -8,12 +8,12 @@ import 'result_screen.dart';
 
 class TileCatalogScreen extends StatefulWidget {
   final String imagePath;
-  final String maskBase64;
+  final String? maskBase64;
 
   const TileCatalogScreen({
     super.key,
     required this.imagePath,
-    required this.maskBase64,
+    this.maskBase64,
   });
 
   @override
@@ -146,14 +146,17 @@ class _TileCatalogScreenState extends State<TileCatalogScreen> {
         // Use new IP-Adapter Material Replacement (Nano Banana Pro)
         resultImageBase64 = await _apiService.replaceMaterial(
           File(widget.imagePath),
-          widget.maskBase64,
           tileFile,
+          maskBase64: widget.maskBase64,
         );
       } else {
-        // Use existing method (Standard or ControlNet)
+        // Use existing method (ControlNet) - REQUIRES MASK
+        if (widget.maskBase64 == null) {
+           throw Exception("Mask required for legacy ControlNet method");
+        }
         resultImageBase64 = await _apiService.applyTile(
           File(widget.imagePath),
-          widget.maskBase64,
+          widget.maskBase64!,
           tileFile,
           _selectedTile!.size,
           useAIEnhancement: _useAIEnhancement,
@@ -180,7 +183,7 @@ class _TileCatalogScreenState extends State<TileCatalogScreen> {
               builder: (_) => ResultScreen(
                 resultImageBase64: resultImageBase64!,
                 originalImagePath: widget.imagePath,
-                maskBase64: widget.maskBase64,
+                maskBase64: widget.maskBase64 ?? "",
               ),
             ),
           );

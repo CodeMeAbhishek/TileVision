@@ -144,83 +144,13 @@ class ApiService {
     }
   }
 
-  /// Apply tile using AI-powered image-guided inpainting
-  /// This provides photorealistic results but takes longer (~10-15 seconds)
-  /// 
-  /// Returns base64 encoded JPEG of the result image
-  Future<String> applyTileAI(
-    File originalImage,
-    String maskBase64,
-    File tileImage,
-  ) async {
-    try {
-      final uri = Uri.parse('$baseUrl/api/apply_tile_ai');
-      
-      var request = http.MultipartRequest('POST', uri);
-      
-      // Add original image with explicit content type
-      request.files.add(await http.MultipartFile.fromPath(
-        'original_image',
-        originalImage.path,
-        contentType: MediaType('image', 'jpeg'),
-      ));
-      
-      // Add mask image (convert base64 to file) with explicit content type
-      final maskBytes = base64Decode(maskBase64);
-      request.files.add(http.MultipartFile.fromBytes(
-        'floor_mask',
-        maskBytes,
-        filename: 'mask.png',
-        contentType: MediaType('image', 'png'),
-      ));
-      
-      // Add tile image with explicit content type
-      request.files.add(await http.MultipartFile.fromPath(
-        'tile_image',
-        tileImage.path,
-        contentType: MediaType('image', 'png'),
-      ));
-
-      // Send request with extended timeout for AI processing
-      final streamedResponse = await request.send().timeout(
-        const Duration(seconds: 60), // AI needs more time
-      );
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return data['result_image'];
-      } else {
-        throw ApiException(
-          'AI tile application failed: ${response.statusCode}',
-          response.body,
-        );
-      }
-    } on TimeoutException {
-      throw ApiException(
-        'AI processing timeout',
-        'AI took too long. Falling back to standard method.',
-      );
-    } on SocketException {
-      throw ApiException(
-        'Network error',
-        'Could not connect to server at $baseUrl. Please check your connection and ensure the backend is running.',
-      );
-    } catch (e) {
-      throw ApiException(
-        'AI tile application error',
-        e.toString(),
-      );
-    }
-  }
-
 
   /// Replace material using IP-Adapter for hyper-realistic results
   Future<String> replaceMaterial(
     File originalImage,
-    String maskBase64,
-    File tileImage,
-  ) async {
+    File tileImage, {
+    String? maskBase64,
+  }) async {
     try {
       final uri = Uri.parse('$baseUrl/api/replace-material');
       var request = http.MultipartRequest('POST', uri);
@@ -231,13 +161,15 @@ class ApiService {
         contentType: MediaType('image', 'jpeg'),
       ));
       
-      final maskBytes = base64Decode(maskBase64);
-      request.files.add(http.MultipartFile.fromBytes(
-        'mask',
-        maskBytes,
-        filename: 'mask.png',
-        contentType: MediaType('image', 'png'),
-      ));
+      if (maskBase64 != null && maskBase64.isNotEmpty) {
+        final maskBytes = base64Decode(maskBase64);
+        request.files.add(http.MultipartFile.fromBytes(
+          'mask',
+          maskBytes,
+          filename: 'mask.png',
+          contentType: MediaType('image', 'png'),
+        ));
+      }
       
       request.files.add(await http.MultipartFile.fromPath(
         'tile',

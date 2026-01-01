@@ -9,13 +9,13 @@ import 'tile_catalog_screen.dart';
 class ResultScreen extends StatefulWidget {
   final String resultImageBase64;
   final String originalImagePath;
-  final String maskBase64;
+  final String? maskBase64;
 
   const ResultScreen({
     super.key,
     required this.resultImageBase64,
     required this.originalImagePath,
-    required this.maskBase64,
+    this.maskBase64,
   });
 
   @override
