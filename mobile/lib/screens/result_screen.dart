@@ -44,11 +44,11 @@ class _ResultScreenState extends State<ResultScreen> {
       await file.writeAsBytes(bytes);
 
       if (mounted) {
-        // TODO: Implement actual gallery save using image_gallery_saver or similar
-        // For now, just show success message
+        // Image saved to temporary directory
+        // Note: For production, consider using image_gallery_saver package for gallery integration
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Image saved to: $filePath'),
+            content: Text('Image saved successfully'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
           ),

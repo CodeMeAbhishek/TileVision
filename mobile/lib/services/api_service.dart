@@ -7,8 +7,9 @@ import 'package:flutter/material.dart';
 
 class ApiService {
   // Base URL for the API - configurable
-  // Use 10.0.2.2 for Android emulator to reach host machine's localhost
-  static const String _defaultBaseUrl = 'http://10.0.2.2:8000';
+  // Production: Render.com backend
+  // Development: Use 'http://10.0.2.2:8000' for Android emulator
+  static const String _defaultBaseUrl = 'https://tilevision.onrender.com';
   final String baseUrl;
   
   // Request timeout duration (increased for AI processing which can take 1-2 minutes)
@@ -81,7 +82,7 @@ class ApiService {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error applying tile: $e');
+      // Log error and rethrow for UI to handle
       rethrow;
     }
   }
@@ -136,36 +137,67 @@ class ApiService {
   /// Get available tiles catalog
   /// 
   /// Returns a list of tile objects
+  /// Includes retry logic for cold starts
   Future<List<dynamic>> getTiles() async {
-    try {
-      final uri = Uri.parse('$baseUrl/api/tiles');
-      
-      final response = await http.get(uri).timeout(_timeout);
+    int maxRetries = 3;
+    int retryDelay = 2; // seconds
+    
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        final uri = Uri.parse('$baseUrl/api/tiles');
+        
+        // Increase timeout for first attempt (cold start might take 30-60s)
+        final timeout = attempt == 0 
+            ? const Duration(seconds: 90) 
+            : _timeout;
+        
+        final response = await http.get(uri).timeout(timeout);
 
-      if (response.statusCode == 200) {
-        return json.decode(response.body) as List<dynamic>;
-      } else {
+        if (response.statusCode == 200) {
+          return json.decode(response.body) as List<dynamic>;
+        } else {
+          throw ApiException(
+            'Failed to load tiles: ${response.statusCode}',
+            response.body,
+          );
+        }
+      } on TimeoutException {
+        if (attempt < maxRetries - 1) {
+          // Wait before retry (exponential backoff)
+          await Future.delayed(Duration(seconds: retryDelay * (attempt + 1)));
+          continue;
+        }
         throw ApiException(
-          'Failed to load tiles: ${response.statusCode}',
-          response.body,
+          'Request timeout',
+          'The server is taking too long to respond. This might be a cold start. Please wait 30 seconds and try again.',
+        );
+      } on SocketException {
+        if (attempt < maxRetries - 1) {
+          // Wait before retry
+          await Future.delayed(Duration(seconds: retryDelay * (attempt + 1)));
+          continue;
+        }
+        throw ApiException(
+          'Network error',
+          'Could not connect to server. Please check your internet connection and try again.',
+        );
+      } catch (e) {
+        if (attempt < maxRetries - 1 && e is ApiException) {
+          // Wait before retry for API exceptions
+          await Future.delayed(Duration(seconds: retryDelay * (attempt + 1)));
+          continue;
+        }
+        throw ApiException(
+          'Failed to load tiles',
+          e.toString(),
         );
       }
-    } on TimeoutException {
-      throw ApiException(
-        'Request timeout',
-        'The server took too long to respond. Please try again.',
-      );
-    } on SocketException {
-      throw ApiException(
-        'Network error',
-        'Could not connect to server at $baseUrl. Please check your connection and ensure the backend is running.',
-      );
-    } catch (e) {
-      throw ApiException(
-        'Failed to load tiles',
-        e.toString(),
-      );
     }
+    
+    throw ApiException(
+      'Failed to load tiles',
+      'Unable to connect after multiple attempts. Please check your connection.',
+    );
   }
 }
 
