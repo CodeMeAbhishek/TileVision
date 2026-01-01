@@ -148,12 +148,14 @@ async def validate_file_size(file: UploadFile):
 
 
 @app.get("/health")
+@app.head("/health")
 async def health_check():
     """
     Health check endpoint
+    Supports both GET and HEAD methods for monitoring services
     
     Returns:
-        dict: Status and version information
+        dict: Status and version information (GET only)
     """
     return {
         "status": "healthy",
