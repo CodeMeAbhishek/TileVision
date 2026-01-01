@@ -34,8 +34,10 @@ class FloorSelectionScreen extends StatelessWidget {
             child: Container(
               width: double.infinity,
               color: Colors.black,
-              child: Interaction(
-                 child: Image.file(
+              child: InteractiveViewer(
+                minScale: 1.0,
+                maxScale: 4.0,
+                child: Image.file(
                   File(imagePath),
                   fit: BoxFit.contain,
                 ),
@@ -96,25 +98,6 @@ class FloorSelectionScreen extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class Interaction extends StatefulWidget {
-  final Widget child;
-  const Interaction({super.key, required this.child});
-
-  @override
-  State<Interaction> createState() => _InteractionState();
-}
-
-class _InteractionState extends State<Interaction> {
-  @override
-  Widget build(BuildContext context) {
-    return InteractiveViewer(
-      minScale: 1.0,
-      maxScale: 4.0,
-      child: widget.child,
     );
   }
 }

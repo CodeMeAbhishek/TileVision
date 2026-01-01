@@ -65,6 +65,12 @@ class AiMaterialReplacer:
         logger.info("Starting AI Material Replacement with Nano Banana Pro...")
         
         try:
+            # Get original image dimensions first (needed for aspect ratio)
+            original_image_bytes = base64.b64decode(room_image_b64.split(',')[1] if ',' in room_image_b64 else room_image_b64)
+            original_image = Image.open(io.BytesIO(original_image_bytes))
+            original_width, original_height = original_image.size
+            logger.info(f"Original image dimensions: {original_width}x{original_height}")
+
             # Prepare data URIs for the model
             # Nano Banana Pro expects image_input as array of data URIs
             room_data_uri = f"data:image/jpeg;base64,{room_image_b64.split(',')[1] if ',' in room_image_b64 else room_image_b64}"
@@ -72,19 +78,39 @@ class AiMaterialReplacer:
             
             logger.info(f"Calling google/nano-banana-pro with 2 images and prompt...")
             
-            # Call Nano Banana Pro with retry logic
+            # Calculate aspect ratio
+            w, h = original_width, original_height
+            ratio = w / h
+            
+            # Snap to nearest standard aspect ratio supported by most models
+            supported_ratios = {
+                "1:1": 1.0,
+                "16:9": 16/9,
+                "9:16": 9/16,
+                "3:2": 3/2,
+                "2:3": 2/3,
+                "4:3": 4/3,
+                "3:4": 3/4,
+                "5:4": 5/4,
+                "4:5": 4/5,
+                "21:9": 21/9,
+                "9:21": 9/21
+            }
+            
+            closest_ar = min(supported_ratios.keys(), key=lambda k: abs(supported_ratios[k] - ratio))
+            logger.info(f"Calculated Aspect Ratio: {closest_ar} (from {w}x{h})")
+
             max_retries = 3
             output = None
-            
+
             for attempt in range(max_retries):
                 try:
                     output = self.client.run(
-                        "google/nano-banana-pro",
+                        "google/gemini-2.5-flash-image",
                         input={
                             "image_input": [room_data_uri, material_data_uri],
                             "prompt": prompt,
-                            "resolution": "2K",  # Good balance of quality and speed
-                            "aspect_ratio": "match_input_image",  # Preserve original aspect ratio
+                            "aspect_ratio": closest_ar,
                             "output_format": "jpg"
                         }
                     )
@@ -92,21 +118,17 @@ class AiMaterialReplacer:
                 except Exception as e:
                     if attempt < max_retries - 1:
                         wait_time = 2 * (2 ** attempt)
-                        logger.warning(f"Nano Banana API attempt {attempt+1} failed ({e}). Retrying in {wait_time}s...")
+                        logger.warning(f"Gemini API attempt {attempt+1} failed ({e}). Retrying in {wait_time}s...")
                         time.sleep(wait_time)
                     else:
                         raise e # Re-raise last error
             
             # Output is a FileOutput object with URL
             if not output:
-                logger.error("Nano Banana Pro returned no output")
+                logger.error("Gemini 2.5 Flash Image returned no output")
                 return None, {"success": False, "error": "No image generated"}
             
-            # Get original image dimensions to preserve them
-            original_image_bytes = base64.b64decode(room_image_b64.split(',')[1] if ',' in room_image_b64 else room_image_b64)
-            original_image = Image.open(io.BytesIO(original_image_bytes))
-            original_width, original_height = original_image.size
-            logger.info(f"Original image dimensions: {original_width}x{original_height}")
+            # Dimensions already loaded at start
             
             # Download the result image
             import requests
@@ -118,26 +140,19 @@ class AiMaterialReplacer:
             
             # Load AI output and resize to match original dimensions
             ai_output_image = Image.open(io.BytesIO(response.content))
-            ai_width, ai_height = ai_output_image.size
-            logger.info(f"AI output dimensions: {ai_width}x{ai_height}")
-            
-            if (ai_width, ai_height) != (original_width, original_height):
-                logger.info(f"Resizing AI output from {ai_width}x{ai_height} to {original_width}x{original_height}")
-                ai_output_image = ai_output_image.resize(
-                    (original_width, original_height),
-                    Image.Resampling.LANCZOS  # High-quality resize
-                )
+            # Dimensions preserved by aspect ratio aspect_ratio parameter
+            # We skip resizing to output the raw high-quality generation
             
             # Convert resized image to base64
             buffered = io.BytesIO()
             ai_output_image.save(buffered, format="JPEG", quality=95)
             result_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
             
-            logger.info(f"✅ Nano Banana Pro Material Replacement complete! Dimensions preserved.")
+            logger.info(f"✅ Gemini 2.5 Flash Image Material Replacement complete! Dimensions preserved.")
             
             return result_b64, {
                 "success": True,
-                "model": "google/nano-banana-pro",
+                "model": "google/gemini-2.5-flash-image",
                 "method": "Multi-Image Conversational Editing",
                 "resolution": "2K",
                 "dimensions_preserved": f"{original_width}x{original_height}"

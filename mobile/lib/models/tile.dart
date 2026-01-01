@@ -24,17 +24,6 @@ class Tile {
     );
   }
 
-  /// Convert Tile to JSON
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'image_url': imageUrl,
-      'size': size,
-      'price': price,
-    };
-  }
-
   @override
   String toString() {
     return 'Tile(id: $id, name: $name, size: $size, price: ₹$price)';

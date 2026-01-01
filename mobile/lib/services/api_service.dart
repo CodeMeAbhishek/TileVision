@@ -11,68 +11,10 @@ class ApiService {
   static const String _defaultBaseUrl = 'http://10.0.2.2:8000';
   final String baseUrl;
   
-  // Request timeout duration (increased for AI segmentation which can take 60-90s)
+  // Request timeout duration (increased for AI processing which can take 1-2 minutes)
   static const Duration _timeout = Duration(seconds: 300);
 
   ApiService({this.baseUrl = _defaultBaseUrl});
-
-  /// Segment floor from image using point coordinate
-  /// 
-  /// Returns a map containing:
-  /// - mask: Base64 encoded PNG of the segmentation mask
-  /// - confidence: Float confidence score (0-1)
-  /// - processing_time: Float processing duration in seconds
-  Future<Map<String, dynamic>> segmentFloor(File image, Offset point) async {
-    try {
-      final uri = Uri.parse('$baseUrl/api/segment-floor');
-      
-      var request = http.MultipartRequest('POST', uri);
-      
-      // Add image file with explicit content type
-      request.files.add(await http.MultipartFile.fromPath(
-        'file',
-        image.path,
-        contentType: MediaType('image', 'jpeg'),
-      ));
-      
-      // Add point coordinates
-      request.fields['point_x'] = point.dx.round().toString();
-      request.fields['point_y'] = point.dy.round().toString();
-
-      // Send request with timeout
-      final streamedResponse = await request.send().timeout(_timeout);
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return {
-          'mask': data['mask'],
-          'confidence': data['confidence'],
-          'processing_time': data['processing_time'],
-        };
-      } else {
-        throw ApiException(
-          'Floor segmentation failed: ${response.statusCode}',
-          response.body,
-        );
-      }
-    } on TimeoutException {
-      throw ApiException(
-        'Request timeout',
-        'The server took too long to respond. Please try again.',
-      );
-    } on SocketException {
-      throw ApiException(
-        'Network error',
-        'Could not connect to server at $baseUrl. Please check your connection and ensure the backend is running.',
-      );
-    } catch (e) {
-      throw ApiException(
-        'Segmentation error',
-        e.toString(),
-      );
-    }
-  }
 
   /// Apply tile pattern to floor with optional AI enhancement
   /// 
@@ -223,22 +165,6 @@ class ApiService {
         'Failed to load tiles',
         e.toString(),
       );
-    }
-  }
-
-  /// Check if server is healthy
-  Future<bool> healthCheck() async {
-    try {
-      final uri = Uri.parse('$baseUrl/health');
-      final response = await http.get(uri).timeout(const Duration(seconds: 5));
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return data['status'] == 'healthy';
-      }
-      return false;
-    } catch (e) {
-      return false;
     }
   }
 }

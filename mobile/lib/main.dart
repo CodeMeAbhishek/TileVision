@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
-import 'screens/floor_selection_screen.dart';
-import 'screens/tile_catalog_screen.dart';
-import 'screens/result_screen.dart';
 
 void main() {
   runApp(const TileVisionApp());

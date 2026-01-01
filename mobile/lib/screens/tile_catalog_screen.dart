@@ -26,9 +26,6 @@ class _TileCatalogScreenState extends State<TileCatalogScreen> {
   Tile? _selectedTile;
   bool _isLoading = false;
   bool _isApplyingTile = false;
-  // AI enhancements are always ON for best quality
-  static const bool _useAIEnhancement = true;
-  static const bool _useMaterialReplacement = true;
 
   @override
   void initState() {
@@ -139,29 +136,12 @@ class _TileCatalogScreenState extends State<TileCatalogScreen> {
       final tileFile = File('${tempDir.path}/temp_tile_${DateTime.now().millisecondsSinceEpoch}.png');
       await tileFile.writeAsBytes(tileResponse.bodyBytes);
       
-      String? resultImageBase64;
-      
-      // Extended timeout handling is now in ApiService
-      if (_useAIEnhancement && _useMaterialReplacement) {
-        // Use new IP-Adapter Material Replacement (Nano Banana Pro)
-        resultImageBase64 = await _apiService.replaceMaterial(
-          File(widget.imagePath),
-          tileFile,
-          maskBase64: widget.maskBase64,
-        );
-      } else {
-        // Use existing method (ControlNet) - REQUIRES MASK
-        if (widget.maskBase64 == null) {
-           throw Exception("Mask required for legacy ControlNet method");
-        }
-        resultImageBase64 = await _apiService.applyTile(
-          File(widget.imagePath),
-          widget.maskBase64!,
-          tileFile,
-          _selectedTile!.size,
-          useAIEnhancement: _useAIEnhancement,
-        );
-      }
+      // Use IP-Adapter Material Replacement (Gemini 2.5) for best quality
+      final resultImageBase64 = await _apiService.replaceMaterial(
+        File(widget.imagePath),
+        tileFile,
+        maskBase64: widget.maskBase64,
+      );
 
       // Clean up temp file
       if (await tileFile.exists()) {
