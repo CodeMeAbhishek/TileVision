@@ -51,11 +51,13 @@ If you prefer Docker, your `Dockerfile` is ready. Render supports both methods.
 **Basic Settings:**
 - **Name**: `tilevision-backend` (or your preferred name)
 - **Environment**: `Python 3`
+- **Python Version**: `3.11.9` ⚠️ **IMPORTANT: Set this manually in Render dashboard!**
 - **Region**: Choose closest to your users
 - **Branch**: `main` (or your default branch)
+- **Root Directory**: `backend` (if your backend folder is in a subdirectory)
 
 **Build & Deploy:**
-- **Build Command**: `pip install -r requirements.txt`
+- **Build Command**: `pip install --upgrade pip setuptools wheel && pip install -r requirements.txt`
 - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 
 **OR if using Docker:**
@@ -215,11 +217,28 @@ static const String _defaultBaseUrl = 'https://your-service-name.onrender.com';
 ### Build Fails
 
 **Common Issues**:
-- Missing dependencies in `requirements.txt`
-- Python version mismatch (check `runtime.txt`)
-- OpenCV dependencies (should be handled automatically)
 
-**Fix**: Check Render build logs for specific errors
+1. **Python Version Mismatch (Most Common)**
+   - **Error**: `Cannot import 'setuptools.build_meta'` or `numpy` build fails
+   - **Cause**: Render using Python 3.13, but dependencies need Python 3.11
+   - **Fix**: 
+     - Go to Render Dashboard → Your Service → Settings
+     - Scroll to "Python Version"
+     - Select **Python 3.11.9** (or latest 3.11.x)
+     - Save and redeploy
+
+2. **Missing Dependencies**
+   - **Error**: Package installation fails
+   - **Fix**: Check Render build logs for specific package errors
+   - **Solution**: Update `requirements.txt` with compatible versions
+
+3. **OpenCV Dependencies**
+   - **Error**: OpenCV build fails
+   - **Fix**: Should be handled automatically, but if issues persist, check system dependencies
+
+4. **Setuptools Missing**
+   - **Error**: `BackendUnavailable: Cannot import 'setuptools.build_meta'`
+   - **Fix**: Updated build command includes `setuptools` installation
 
 ### CORS Errors
 

@@ -7,10 +7,12 @@
    - New → Web Service
    - Connect Git repo
 
-2. **Settings**
-   - Build: `pip install -r requirements.txt`
-   - Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-   - OR use Dockerfile
+2. **Settings** ⚠️ **CRITICAL**
+   - **Python Version**: Set to **Python 3.11.9** (in Settings → Python Version)
+   - **Root Directory**: `backend` (if backend is in subdirectory)
+   - **Build**: `pip install --upgrade pip setuptools wheel && pip install -r requirements.txt`
+   - **Start**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - **OR use Dockerfile**: Set Environment to "Docker", Dockerfile Path: `backend/Dockerfile`
 
 3. **Environment Variables**
    ```
