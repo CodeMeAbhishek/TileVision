@@ -1,0 +1,14 @@
+// Fix for image_gallery_saver namespace issue
+subprojects {
+    afterEvaluate { project ->
+        if (project.name == "image_gallery_saver") {
+            if (project.hasProperty("android")) {
+                def android = project.android
+                if (android != null && !android.hasProperty("namespace")) {
+                    android.namespace = "com.example.image_gallery_saver"
+                }
+            }
+        }
+    }
+}
+

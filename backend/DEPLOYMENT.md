@@ -75,6 +75,7 @@ Click **"Environment"** tab and add:
 | `DEBUG` | `false` | Set to false for production |
 | `MAX_IMAGE_SIZE` | `1024` | Max image dimension in pixels |
 | `ALLOWED_ORIGINS` | `*` | CORS origins (use `*` for testing, specific domains for production) |
+| `BASE_URL` | `https://tilevision.onrender.com` | Base URL for tile images (auto-detected, but can override) |
 
 **Important**: 
 - Keep `REPLICATE_API_TOKEN` as **Secret** (Render will encrypt it)

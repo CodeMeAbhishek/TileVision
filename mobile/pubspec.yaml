@@ -27,6 +27,16 @@ dependencies:
   
   # Sharing functionality
   share_plus: ^7.2.1
+  
+  # Gallery save
+  image_gallery_saver: ^2.0.3
+  permission_handler: ^11.0.0
+  
+  # Network connectivity
+  connectivity_plus: ^5.0.2
+  
+  # Image caching
+  cached_network_image: ^3.3.0
 
 dev_dependencies:
   flutter_test:

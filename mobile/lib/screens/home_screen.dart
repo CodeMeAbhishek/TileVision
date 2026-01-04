@@ -5,6 +5,9 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'floor_selection_screen.dart';
+import '../helpers/error_helper.dart';
+import '../helpers/responsive_helper.dart';
+import 'project_history_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -32,20 +35,9 @@ class HomeScreen extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        String errorMessage = 'Failed to pick image';
-        
-        // Handle specific error types
-        if (e.toString().contains('Permission')) {
-          errorMessage = 'Camera/Gallery permission denied. Please enable it in settings.';
-        } else if (e.toString().contains('camera_access_denied')) {
-          errorMessage = 'Camera access denied. Please grant permission in app settings.';
-        } else if (e.toString().contains('photo_access_denied')) {
-          errorMessage = 'Photo library access denied. Please grant permission in app settings.';
-        }
-        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errorMessage),
+            content: Text(ErrorHelper.getUserFriendlyError(e)),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 4),
             action: SnackBarAction(
@@ -61,45 +53,63 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final padding = ResponsiveHelper.getPadding(context);
+    final spacing = ResponsiveHelper.getSpacing(context);
+    final isMobile = ResponsiveHelper.isMobile(context);
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('TileVision'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ProjectHistoryScreen(),
+                ),
+              );
+            },
+            tooltip: 'Project History',
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.all(24.0),
+            padding: padding,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // App logo/title section
-                const Icon(
+                Icon(
                   Icons.grid_on,
-                  size: 80,
-                  color: Color(0xFF2196F3),
+                  size: ResponsiveHelper.getIconSize(context) * 3,
+                  color: const Color(0xFF2196F3),
                 ),
-                const SizedBox(height: 16),
-                const Text(
+                SizedBox(height: spacing * 2),
+                Text(
                   'Visualize Your Floor',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 28,
+                    fontSize: ResponsiveHelper.getFontSize(context, mobile: 24, tablet: 28, desktop: 32),
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF2196F3),
+                    color: const Color(0xFF2196F3),
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Text(
+                SizedBox(height: spacing),
+                Text(
                   'Take or upload a photo of your room to get started',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: ResponsiveHelper.getFontSize(context, mobile: 14, tablet: 16, desktop: 18),
                     color: Colors.grey,
                   ),
                 ),
-                const SizedBox(height: 48),
+                SizedBox(height: spacing * 3),
                 
                 // Test button - load sample image directly
                 ElevatedButton.icon(
@@ -139,11 +149,11 @@ class HomeScreen extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.purple,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: ResponsiveHelper.getButtonPadding(context),
                   ),
                 ),
                 
-                const SizedBox(height: 24),
+                SizedBox(height: spacing * 2),
                 
                 // Take Photo button
                 Card(
@@ -151,29 +161,30 @@ class HomeScreen extends StatelessWidget {
                     onTap: () => _pickImage(context, ImageSource.camera),
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
-                      padding: const EdgeInsets.all(24),
-                      child: const Column(
+                      padding: EdgeInsets.all(padding.left),
+                      height: ResponsiveHelper.getCardHeight(context),
+                      child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
                             Icons.camera_alt,
-                            size: 48,
-                            color: Color(0xFF2196F3),
+                            size: ResponsiveHelper.getIconSize(context) * 2,
+                            color: const Color(0xFF2196F3),
                           ),
-                          SizedBox(height: 12),
+                          SizedBox(height: spacing),
                           Text(
                             'Take Photo',
                             style: TextStyle(
-                              fontSize: 20,
+                              fontSize: ResponsiveHelper.getFontSize(context, mobile: 18, tablet: 20, desktop: 22),
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF2196F3),
+                              color: const Color(0xFF2196F3),
                             ),
                           ),
                           SizedBox(height: 4),
                           Text(
                             'Use your camera',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: ResponsiveHelper.getFontSize(context, mobile: 12, tablet: 14, desktop: 16),
                               color: Colors.grey,
                             ),
                           ),
@@ -183,7 +194,7 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
                 
-                const SizedBox(height: 16),
+                SizedBox(height: spacing * 2),
                 
                 // Upload Photo button
                 Card(
@@ -191,29 +202,30 @@ class HomeScreen extends StatelessWidget {
                     onTap: () => _pickImage(context, ImageSource.gallery),
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
-                      padding: const EdgeInsets.all(24),
-                      child: const Column(
+                      padding: EdgeInsets.all(padding.left),
+                      height: ResponsiveHelper.getCardHeight(context),
+                      child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
                             Icons.photo_library,
-                            size: 48,
-                            color: Color(0xFF2196F3),
+                            size: ResponsiveHelper.getIconSize(context) * 2,
+                            color: const Color(0xFF2196F3),
                           ),
-                          SizedBox(height: 12),
+                          SizedBox(height: spacing),
                           Text(
                             'Upload Photo',
                             style: TextStyle(
-                              fontSize: 20,
+                              fontSize: ResponsiveHelper.getFontSize(context, mobile: 18, tablet: 20, desktop: 22),
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF2196F3),
+                              color: const Color(0xFF2196F3),
                             ),
                           ),
                           SizedBox(height: 4),
                           Text(
                             'Choose from gallery',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: ResponsiveHelper.getFontSize(context, mobile: 12, tablet: 14, desktop: 16),
                               color: Colors.grey,
                             ),
                           ),

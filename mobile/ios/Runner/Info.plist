@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>TileVision needs access to save your floor visualizations to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>TileVision needs access to your photos to visualize tiles on your room floors.</string>
 </dict>
 </plist>

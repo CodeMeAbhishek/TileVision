@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'tile_catalog_screen.dart';
+import '../helpers/responsive_helper.dart';
 
 class FloorSelectionScreen extends StatelessWidget {
   final String imagePath;
@@ -45,7 +46,7 @@ class FloorSelectionScreen extends StatelessWidget {
             ),
           ),
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: ResponsiveHelper.getPadding(context),
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
@@ -58,17 +59,17 @@ class FloorSelectionScreen extends StatelessWidget {
             ),
             child: Column(
               children: [
-                const Text(
+                Text(
                   "Does this look correct?",
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: ResponsiveHelper.getFontSize(context, mobile: 14, tablet: 16, desktop: 18),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: ResponsiveHelper.getSpacing(context) * 2),
                 SizedBox(
                   width: double.infinity,
-                  height: 50,
+                  height: ResponsiveHelper.isMobile(context) ? 48 : 56,
                   child: ElevatedButton(
                     onPressed: () => _confirmAndProceed(context),
                     style: ElevatedButton.styleFrom(
@@ -79,19 +80,24 @@ class FloorSelectionScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Yes, Select Tiles',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: ResponsiveHelper.getFontSize(context, mobile: 14, tablet: 16, desktop: 18),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: ResponsiveHelper.getSpacing(context)),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text("Retake Photo"),
+                  child: Text(
+                    "Retake Photo",
+                    style: TextStyle(
+                      fontSize: ResponsiveHelper.getFontSize(context, mobile: 14, tablet: 16, desktop: 18),
+                    ),
+                  ),
                 ),
               ],
             ),

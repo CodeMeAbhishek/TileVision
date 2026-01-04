@@ -4,18 +4,32 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import '../helpers/connectivity_helper.dart';
 
 class ApiService {
   // Base URL for the API - configurable
   // Production: Render.com backend
-  // Development: Use 'http://10.0.2.2:8000' for Android emulator
-  static const String _defaultBaseUrl = 'https://tilevision.onrender.com';
+  // Development: 
+  //   - Android Emulator: 'http://10.0.2.2:8000'
+  //   - Physical Device: 'http://YOUR_COMPUTER_IP:8000' (e.g., 'http://192.168.1.100:8000')
+  //   - iOS Simulator: 'http://localhost:8000'
+  static String get _defaultBaseUrl {
+    // Always use production URL for APK builds
+    // For local development, manually change this or pass baseUrl parameter
+    return 'https://tilevision.onrender.com';
+  }
+  
   final String baseUrl;
   
   // Request timeout duration (increased for AI processing which can take 1-2 minutes)
   static const Duration _timeout = Duration(seconds: 300);
 
-  ApiService({this.baseUrl = _defaultBaseUrl});
+  ApiService({String? baseUrl}) : baseUrl = baseUrl ?? _defaultBaseUrl {
+    if (kDebugMode) {
+      print('🔗 ApiService initialized with baseUrl: $baseUrl');
+    }
+  }
 
   /// Apply tile pattern to floor with optional AI enhancement
   /// 
@@ -34,6 +48,14 @@ class ApiService {
     double aiStrength = 0.3,
     double aiBlend = 0.5,
   }) async {
+    // Check connectivity first
+    if (!await ConnectivityHelper.isConnected()) {
+      throw ApiException(
+        'No Internet Connection',
+        'Please check your network connection and try again.',
+      );
+    }
+    
     try {
       var request = http.MultipartRequest(
         'POST',
@@ -88,37 +110,40 @@ class ApiService {
   }
 
 
-  /// Replace material using IP-Adapter for hyper-realistic results
+  /// Replace floor material using Gemini 2.5 Flash - Direct AI (no segmentation needed)
+  /// Gemini automatically detects and replaces the floor area
   Future<String> replaceMaterial(
     File originalImage,
     File tileImage, {
-    String? maskBase64,
+    String? maskBase64, // Not used - kept for API compatibility but ignored
   }) async {
+    // Check connectivity first
+    if (!await ConnectivityHelper.isConnected()) {
+      throw ApiException(
+        'No Internet Connection',
+        'Please check your network connection and try again.',
+      );
+    }
+    
     try {
       final uri = Uri.parse('$baseUrl/api/replace-material');
       var request = http.MultipartRequest('POST', uri);
       
+      // Add room image
       request.files.add(await http.MultipartFile.fromPath(
         'image',
         originalImage.path,
         contentType: MediaType('image', 'jpeg'),
       ));
       
-      if (maskBase64 != null && maskBase64.isNotEmpty) {
-        final maskBytes = base64Decode(maskBase64);
-        request.files.add(http.MultipartFile.fromBytes(
-          'mask',
-          maskBytes,
-          filename: 'mask.png',
-          contentType: MediaType('image', 'png'),
-        ));
-      }
-      
+      // Add tile image (mask not needed - Gemini auto-detects floor)
       request.files.add(await http.MultipartFile.fromPath(
         'tile',
         tileImage.path,
         contentType: MediaType('image', 'png'),
       ));
+      
+      // Note: maskBase64 is ignored - Gemini automatically detects floor area
       
       final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
       final response = await http.Response.fromStream(streamedResponse);
@@ -127,7 +152,17 @@ class ApiService {
         final data = json.decode(response.body);
         return data['result_image'];
       } else {
-        throw ApiException('Material replacement failed: ${response.statusCode}', response.body);
+        // Try to extract error message from response
+        String errorMessage = 'Material replacement failed';
+        try {
+          final errorData = json.decode(response.body);
+          if (errorData is Map && errorData.containsKey('detail')) {
+            errorMessage = errorData['detail'].toString();
+          }
+        } catch (_) {
+          errorMessage = response.body.isNotEmpty ? response.body : 'Unknown error';
+        }
+        throw ApiException('Material replacement failed (${response.statusCode})', errorMessage);
       }
     } catch (e) {
       throw ApiException('AI Material error', e.toString());
@@ -139,6 +174,14 @@ class ApiService {
   /// Returns a list of tile objects
   /// Includes retry logic for cold starts
   Future<List<dynamic>> getTiles() async {
+    // Check connectivity first
+    if (!await ConnectivityHelper.isConnected()) {
+      throw ApiException(
+        'No Internet Connection',
+        'Please check your network connection and try again.',
+      );
+    }
+    
     int maxRetries = 3;
     int retryDelay = 2; // seconds
     

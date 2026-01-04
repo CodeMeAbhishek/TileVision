@@ -54,7 +54,13 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Configuration
 MAX_FILE_SIZE = int(os.getenv("MAX_IMAGE_SIZE", 1024)) * 1024 * 10  # 10MB default
-DEBUG = os.getenv("DEBUG", "true").lower() == "true"
+# Default to False for production safety (auto-reload disabled)
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+
+# Get base URL for tile images (works in both dev and production)
+BASE_URL = os.getenv("BASE_URL", "https://tilevision.onrender.com")
+# Remove trailing slash if present
+BASE_URL = BASE_URL.rstrip("/")
 
 # Initialize services
 try:
@@ -79,40 +85,40 @@ except Exception as e:
 floor_segmenter = FloorSegmenter(replicate_token) if replicate_token else None
 perspective_corrector = PerspectiveCorrector()
 
-# Sample tile catalog - Now with AI-generated seamless textures!
+# Sample tile catalog - URLs use BASE_URL for production compatibility
 TILE_CATALOG = [
     {
         "id": 1,
         "name": "Carrara Marble White",
-        "image_url": "http://10.0.2.2:8000/static/tiles/marble_white_seamless.jpg",
+        "image_url": f"{BASE_URL}/static/tiles/marble_white_seamless.jpg",
         "size": "2x2",
         "price": 1200.00
     },
     {
         "id": 2,
         "name": "Oak Wood Natural",
-        "image_url": "http://10.0.2.2:8000/static/tiles/wooden_oak_seamless.jpg",
+        "image_url": f"{BASE_URL}/static/tiles/wooden_oak_seamless.jpg",
         "size": "1x3",
         "price": 890.00
     },
     {
         "id": 3,
         "name": "Ceramic Beige Classic",
-        "image_url": "http://10.0.2.2:8000/static/tiles/ceramic_beige_seamless.jpg",
+        "image_url": f"{BASE_URL}/static/tiles/ceramic_beige_seamless.jpg",
         "size": "2x2",
         "price": 750.00
     },
     {
         "id": 4,
         "name": "Granite Dark Luxury",
-        "image_url": "http://10.0.2.2:8000/static/tiles/granite_dark_seamless.jpg",
+        "image_url": f"{BASE_URL}/static/tiles/granite_dark_seamless.jpg",
         "size": "3x3",
         "price": 1500.00
     },
     {
         "id": 5,
         "name": "Terracotta Rustic",
-        "image_url": "http://10.0.2.2:8000/static/tiles/terracotta_seamless.jpg",
+        "image_url": f"{BASE_URL}/static/tiles/terracotta_seamless.jpg",
         "size": "2x2",
         "price": 650.00
     },
@@ -376,45 +382,55 @@ async def get_tiles():
 @app.post("/api/replace-material")
 async def replace_material(
     image: UploadFile = File(...),
-    mask: Optional[UploadFile] = File(None),
     tile: UploadFile = File(...),
-    prompt: Optional[str] = Form("In image 1, replace the floor with the tile pattern from image 2. Keep everything else exactly the same."),
+    prompt: Optional[str] = Form(None),  # Use optimized default prompt
 ):
     """
-    Replace material in masked area using reference tile image (IP-Adapter)
+    Replace floor material using Gemini 2.5 Flash - Direct AI replacement (no segmentation needed)
+    Gemini automatically detects and replaces the floor area
     """
     if not os.getenv("REPLICATE_API_TOKEN"):
         raise HTTPException(status_code=500, detail="AI service not configured")
 
     try:
-        # Read files
+        # Read files (no mask needed - Gemini auto-detects floor)
         image_bytes = await image.read()
         tile_bytes = await tile.read()
         
-        mask_b64 = None
-        if mask:
-             mask_bytes = await mask.read()
-             mask_b64 = base64.b64encode(mask_bytes).decode('utf-8')
+        # Log file sizes for debugging
+        logger.info(f"Received room image: {len(image_bytes)} bytes, tile image: {len(tile_bytes)} bytes")
 
         # Convert to base64
         image_b64 = base64.b64encode(image_bytes).decode('utf-8')
         tile_b64 = base64.b64encode(tile_bytes).decode('utf-8')
         
         start_time = time.time()
-        logger.info(f"Processing material replacement...")
+        logger.info(f"Processing material replacement (direct Gemini AI, no segmentation)...")
 
         result_url, metadata = material_replacer.replace_material(
             image_b64,
-            mask_b64,
-            tile_b64,
-            prompt=prompt
+            mask_image_b64=None,  # Not used - Gemini auto-detects floor
+            material_image_b64=tile_b64,
+            prompt=prompt  # Will use optimized default if None
         )
 
         elapsed = time.time() - start_time
         logger.info(f"✅ Material replacement {'complete' if result_url else 'failed'}: {elapsed:.2f}s")
         
         if not result_url:
-             raise HTTPException(status_code=500, detail=metadata.get("error", "Unknown error"))
+            error_detail = metadata.get("error", "Unknown error")
+            error_type = metadata.get("error_type", "unknown")
+            
+            # Return appropriate status codes based on error type
+            status_code = 500
+            if error_type == "billing":
+                status_code = 402  # Payment Required
+            elif error_type == "rate_limit":
+                status_code = 429  # Too Many Requests
+            elif error_type == "timeout":
+                status_code = 504  # Gateway Timeout
+                
+            raise HTTPException(status_code=status_code, detail=error_detail)
              
         # Result is already base64 from the updated material_replacer
         result_b64 = result_url
@@ -425,9 +441,12 @@ async def replace_material(
             "metadata": metadata
         })
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (already formatted)
+        raise
     except Exception as e:
         logger.error(f"Error in replace_material: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
 
 
 if __name__ == "__main__":
