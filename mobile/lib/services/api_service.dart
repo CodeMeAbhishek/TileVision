@@ -15,8 +15,20 @@ class ApiService {
   //   - Physical Device: 'http://YOUR_COMPUTER_IP:8000' (e.g., 'http://192.168.1.100:8000')
   //   - iOS Simulator: 'http://localhost:8000'
   static String get _defaultBaseUrl {
-    // Always use production URL for APK builds
-    // For local development, manually change this or pass baseUrl parameter
+    // Auto-detect environment:
+    // - Debug mode (simulator/emulator): Use localhost for development
+    // - Release mode (APK builds): Use production URL
+    if (kDebugMode) {
+      // For Android emulator, use 10.0.2.2 to access host machine's localhost
+      if (Platform.isAndroid) {
+        return 'http://10.0.2.2:8000';
+      }
+      // For iOS simulator, localhost works directly
+      if (Platform.isIOS) {
+        return 'http://localhost:8000';
+      }
+    }
+    // Production URL for release builds
     return 'https://tilevision.onrender.com';
   }
   

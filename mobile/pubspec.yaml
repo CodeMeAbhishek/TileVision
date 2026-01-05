@@ -27,6 +27,7 @@ dependencies:
   
   # Sharing functionality
   share_plus: ^7.2.1
+  url_launcher: ^6.2.5
   
   # Gallery save
   image_gallery_saver: ^2.0.3
@@ -37,6 +38,15 @@ dependencies:
   
   # Image caching
   cached_network_image: ^3.3.0
+  
+  # Local storage
+  shared_preferences: ^2.2.2
+  
+  # Supabase for authentication and database
+  supabase_flutter: ^2.5.4
+  
+  # Environment variables
+  flutter_dotenv: ^5.1.0
 
 dev_dependencies:
   flutter_test:
@@ -50,3 +60,4 @@ flutter:
   assets:
     - assets/
     - assets/tiles/
+    - .env

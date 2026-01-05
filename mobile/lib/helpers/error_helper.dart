@@ -49,6 +49,29 @@ class ErrorHelper {
       return 'Rate limit exceeded. Please wait a moment and try again.';
     }
     
+    // Authentication errors
+    if (errorStr.contains('invalid api key') || 
+        errorStr.contains('invalid key') ||
+        errorStr.contains('401')) {
+      return 'Invalid Supabase API key. Please check your .env file and ensure you\'re using the correct anon key from Supabase dashboard.';
+    }
+    
+    if (errorStr.contains('invalid login') || 
+        errorStr.contains('invalid credentials') ||
+        errorStr.contains('email not confirmed') ||
+        errorStr.contains('wrong password') ||
+        errorStr.contains('user not found')) {
+      return 'Invalid email or password. Please check your credentials and try again.';
+    }
+    
+    if (errorStr.contains('pending approval') || errorStr.contains('not approved')) {
+      return 'Your account is pending approval. Please contact support.';
+    }
+    
+    if (errorStr.contains('supabase not initialized')) {
+      return 'App configuration error. Please restart the app.';
+    }
+    
     // Default friendly message
     return 'Something went wrong. Please try again.';
   }

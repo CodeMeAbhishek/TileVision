@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -9,11 +9,32 @@ from datetime import datetime
 from typing import Optional
 import os
 from dotenv import load_dotenv
+from pydantic import ValidationError
 
 from segmentation import FloorSegmenter
 from perspective import PerspectiveCorrector
 from ai_realistic_render import RealisticTileRenderer
 from ai_material_replacer import AiMaterialReplacer
+
+# Import security utilities
+from security import (
+    limiter,
+    RATE_LIMIT_CONFIG,
+    rate_limit_key_func,
+    rate_limit_handler,
+    add_security_headers,
+    validate_image_file,
+    sanitize_filename,
+    sanitize_string,
+    validate_numeric_range,
+    CoordinateInput,
+    TileSizeInput,
+    AIEnhancementInput,
+    MaterialReplacementPromptInput,
+    MAX_FILE_SIZE as SECURITY_MAX_FILE_SIZE,
+)
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 # Load environment variables
 load_dotenv()
@@ -31,6 +52,18 @@ app = FastAPI(
     description="Backend API for floor segmentation and tile visualization",
     version="0.1.0"
 )
+
+# ============================================================================
+# Security Middleware Setup
+# ============================================================================
+
+# Add rate limiting middleware (must be added before other middleware)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+# Add security headers middleware
+app.middleware("http")(add_security_headers)
 
 # Enable CORS - configurable via environment variable
 # For production, set ALLOWED_ORIGINS to specific domains (comma-separated)
@@ -53,7 +86,8 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Configuration
-MAX_FILE_SIZE = int(os.getenv("MAX_IMAGE_SIZE", 1024)) * 1024 * 10  # 10MB default
+# Use security module's MAX_FILE_SIZE or override from env
+MAX_FILE_SIZE = int(os.getenv("MAX_IMAGE_SIZE", 10)) * 1024 * 1024  # Default 10MB
 # Default to False for production safety (auto-reload disabled)
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
@@ -126,12 +160,14 @@ TILE_CATALOG = [
 
 
 @app.middleware("http")
-async def log_requests(request, call_next):
+async def log_requests(request: Request, call_next):
     """Log all incoming requests with timestamps"""
     start_time = time.time()
     timestamp = datetime.now().isoformat()
     
-    logger.info(f"[{timestamp}] {request.method} {request.url.path}")
+    # Get client IP for logging
+    client_ip = request.client.host if request.client else "unknown"
+    logger.info(f"[{timestamp}] {request.method} {request.url.path} from {client_ip}")
     
     response = await call_next(request)
     
@@ -142,23 +178,40 @@ async def log_requests(request, call_next):
 
 
 async def validate_file_size(file: UploadFile):
-    """Validate uploaded file size"""
+    """
+    Validate uploaded file size and type
+    Following OWASP file upload security best practices
+    """
+    # Validate file type first
+    validate_image_file(file.content_type, file.filename)
+    
+    # Validate file size
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024 * 1024)}MB"
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024 * 1024):.1f}MB"
         )
+    
+    # Validate file is not empty
+    if len(contents) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File is empty"
+        )
+    
     await file.seek(0)  # Reset file pointer
     return contents
 
 
 @app.get("/health")
 @app.head("/health")
-async def health_check():
+@limiter.limit(RATE_LIMIT_CONFIG["health"])
+async def health_check(request: Request):
     """
     Health check endpoint
     Supports both GET and HEAD methods for monitoring services
+    Rate limited to prevent abuse while allowing monitoring
     
     Returns:
         dict: Status and version information (GET only)
@@ -175,18 +228,22 @@ async def health_check():
 
 
 @app.post("/api/segment-floor")
+@limiter.limit(RATE_LIMIT_CONFIG["strict"])
 async def segment_floor(
+    request: Request,
     file: UploadFile = File(...),
     point_x: int = Form(...),
     point_y: int = Form(...)
 ):
     """
     Segment floor from image using Segment Anything Model
+    Rate limited: 10 requests per minute per IP/user
     
     Args:
+        request: FastAPI request object (for rate limiting)
         file: Image file containing the room/floor
-        point_x: X coordinate of point on floor
-        point_y: Y coordinate of point on floor
+        point_x: X coordinate of point on floor (0-100000)
+        point_y: Y coordinate of point on floor (0-100000)
         
     Returns:
         dict: Base64 encoded mask, confidence score, and processing time
@@ -194,10 +251,18 @@ async def segment_floor(
     start_time = time.time()
     
     try:
-        # Validate file
-        if not file.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
+        # Strict input validation using Pydantic schema
+        try:
+            coord_input = CoordinateInput(point_x=point_x, point_y=point_y)
+            point_x = coord_input.point_x
+            point_y = coord_input.point_y
+        except ValidationError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid coordinates: {e.errors()}"
+            )
         
+        # Validate and read file (includes type and size validation)
         image_bytes = await validate_file_size(file)
         
         logger.info(f"Processing floor segmentation at point ({point_x}, {point_y})")
@@ -247,33 +312,54 @@ async def segment_floor(
 
 
 @app.post("/api/apply-tile")
+@limiter.limit(RATE_LIMIT_CONFIG["moderate"])
 async def apply_tile(
+    request: Request,
     original_image: UploadFile = File(...),
     floor_mask: UploadFile = File(...),
     tile_image: UploadFile = File(...),
     tile_size: str = Form("2x2"),
-    use_ai_enhancement: bool = Form(False),  # NEW: Enable ControlNet
-    ai_strength: float = Form(0.3),          # NEW: AI modification strength (0.2-0.4)
-    ai_blend: float = Form(0.5)              # NEW: Blend ratio (0.5 = 50/50)
+    use_ai_enhancement: bool = Form(False),
+    ai_strength: float = Form(0.3),
+    ai_blend: float = Form(0.5)
 ):
     """
     Apply tile pattern to floor with optional AI enhancement
+    Rate limited: 30 requests per minute per IP/user
     
     Parameters:
+    - request: FastAPI request object (for rate limiting)
+    - original_image: Original room image
+    - floor_mask: Floor segmentation mask
+    - tile_image: Tile pattern image
+    - tile_size: Tile size in format "WxH" (e.g., "2x2", "3.5x3.5")
     - use_ai_enhancement: Enable ControlNet realistic lighting (default: False)
-    - ai_strength: AI modification strength, lower = more preservation (default: 0.3)
-    - ai_blend: Blend ratio - 0.0=only direct, 1.0=only AI (default: 0.5)
+    - ai_strength: AI modification strength, 0.0-1.0 (default: 0.3)
+    - ai_blend: Blend ratio, 0.0-1.0 (default: 0.5)
     """
     start_time = time.time()
     
     try:
-        # Validate file types
-        if not original_image.content_type.startswith('image/'):
-            raise HTTPException(400, "Original must be an image")
-        if not tile_image.content_type.startswith('image/'):
-            raise HTTPException(400, "Tile must be an image")
+        # Strict input validation using Pydantic schemas
+        try:
+            tile_size_input = TileSizeInput(tile_size=tile_size)
+            tile_size = tile_size_input.tile_size
+            
+            ai_input = AIEnhancementInput(
+                use_ai_enhancement=use_ai_enhancement,
+                ai_strength=ai_strength,
+                ai_blend=ai_blend
+            )
+            use_ai_enhancement = ai_input.use_ai_enhancement
+            ai_strength = ai_input.ai_strength
+            ai_blend = ai_input.ai_blend
+        except ValidationError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid input parameters: {e.errors()}"
+            )
         
-        # Read images
+        # Validate and read images (includes type and size validation)
         original_bytes = await validate_file_size(original_image)
         mask_bytes = await validate_file_size(floor_mask)
         tile_bytes = await validate_file_size(tile_image)
@@ -296,12 +382,17 @@ async def apply_tile(
         if original_img is None or mask_img is None or tile_img is None:
             raise HTTPException(400, "Failed to decode images")
         
-        # Parse tile size (e.g., "2x2" -> (2.0, 2.0) feet)
+        # Parse tile size (already validated by Pydantic)
+        # Format: "WxH" -> (width, height) in feet
         try:
-            width, height = tile_size.lower().split('x')
+            width, height = tile_size.split('x')
             tile_size_feet = (float(width), float(height))
-        except:
-            tile_size_feet = (2.0, 2.0)  # Default
+            # Additional validation: ensure reasonable tile sizes
+            if tile_size_feet[0] <= 0 or tile_size_feet[1] <= 0 or tile_size_feet[0] > 100 or tile_size_feet[1] > 100:
+                raise ValueError("Tile size must be between 0.1 and 100 feet")
+        except (ValueError, AttributeError) as e:
+            logger.warning(f"Invalid tile size format: {tile_size}, using default")
+            tile_size_feet = (2.0, 2.0)  # Safe default
         
         logger.info(f"Applying tile pattern with size: {tile_size} ({tile_size_feet} feet)")
         
@@ -368,9 +459,14 @@ async def apply_tile(
 
 
 @app.get("/api/tiles")
-async def get_tiles():
+@limiter.limit(RATE_LIMIT_CONFIG["lenient"])
+async def get_tiles(request: Request):
     """
     Get available tile catalog
+    Rate limited: 100 requests per hour per IP/user
+    
+    Args:
+        request: FastAPI request object (for rate limiting)
     
     Returns:
         list: List of available tiles with details
@@ -380,22 +476,44 @@ async def get_tiles():
 
 
 @app.post("/api/replace-material")
+@limiter.limit(RATE_LIMIT_CONFIG["strict"])
 async def replace_material(
+    request: Request,
     image: UploadFile = File(...),
     tile: UploadFile = File(...),
-    prompt: Optional[str] = Form(None),  # Use optimized default prompt
+    prompt: Optional[str] = Form(None),
 ):
     """
     Replace floor material using Gemini 2.5 Flash - Direct AI replacement (no segmentation needed)
+    Rate limited: 10 requests per minute per IP/user
     Gemini automatically detects and replaces the floor area
+    
+    Args:
+        request: FastAPI request object (for rate limiting)
+        image: Room image file
+        tile: Tile pattern image file
+        prompt: Optional custom prompt (max 1000 chars, sanitized)
     """
     if not os.getenv("REPLICATE_API_TOKEN"):
-        raise HTTPException(status_code=500, detail="AI service not configured")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI service not configured"
+        )
 
     try:
-        # Read files (no mask needed - Gemini auto-detects floor)
-        image_bytes = await image.read()
-        tile_bytes = await tile.read()
+        # Strict input validation
+        try:
+            prompt_input = MaterialReplacementPromptInput(prompt=prompt)
+            prompt = prompt_input.prompt
+        except ValidationError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid prompt: {e.errors()}"
+            )
+        
+        # Validate and read files (includes type and size validation)
+        image_bytes = await validate_file_size(image)
+        tile_bytes = await validate_file_size(tile)
         
         # Log file sizes for debugging
         logger.info(f"Received room image: {len(image_bytes)} bytes, tile image: {len(tile_bytes)} bytes")

@@ -14,7 +14,11 @@ services:
       - key: DEBUG
         value: false
       - key: MAX_IMAGE_SIZE
-        value: 1024
+        value: 10  # Max image size in MB (default: 10MB)
+      - key: ALLOWED_ORIGINS
+        value: "*"  # CORS origins - use "*" for testing, specific domains for production
+      - key: BASE_URL
+        value: https://tilevision.onrender.com  # Base URL for tile images
     healthCheckPath: /health
     plan: free
 

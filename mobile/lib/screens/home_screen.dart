@@ -7,7 +7,7 @@ import 'dart:typed_data';
 import 'floor_selection_screen.dart';
 import '../helpers/error_helper.dart';
 import '../helpers/responsive_helper.dart';
-import 'project_history_screen.dart';
+import '../helpers/page_transitions.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -26,8 +26,8 @@ class HomeScreen extends StatelessWidget {
         // Navigate to floor selection screen with the image path
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => FloorSelectionScreen(
+          FadeSlideRoute(
+            page: FloorSelectionScreen(
               imagePath: image.path,
             ),
           ),
@@ -55,187 +55,160 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final padding = ResponsiveHelper.getPadding(context);
     final spacing = ResponsiveHelper.getSpacing(context);
-    final isMobile = ResponsiveHelper.isMobile(context);
+    final theme = Theme.of(context);
     
     return Scaffold(
       appBar: AppBar(
         title: const Text('TileVision'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ProjectHistoryScreen(),
-                ),
-              );
-            },
-            tooltip: 'Project History',
-          ),
-        ],
+        automaticallyImplyLeading: false,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: padding,
+            padding: EdgeInsets.symmetric(horizontal: padding.left),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // App logo/title section
-                Icon(
-                  Icons.grid_on,
-                  size: ResponsiveHelper.getIconSize(context) * 3,
-                  color: const Color(0xFF2196F3),
-                ),
-                SizedBox(height: spacing * 2),
-                Text(
-                  'Visualize Your Floor',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: ResponsiveHelper.getFontSize(context, mobile: 24, tablet: 28, desktop: 32),
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF2196F3),
-                  ),
-                ),
-                SizedBox(height: spacing),
-                Text(
-                  'Take or upload a photo of your room to get started',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: ResponsiveHelper.getFontSize(context, mobile: 14, tablet: 16, desktop: 18),
-                    color: Colors.grey,
-                  ),
-                ),
                 SizedBox(height: spacing * 3),
                 
-                // Test button - load sample image directly
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    try {
-                      // Load asset and save to temp file
-                      final ByteData data = await rootBundle.load('assets/test_room.jpg');
-                      final Uint8List bytes = data.buffer.asUint8List();
-                      
-                      final tempDir = await getTemporaryDirectory();
-                      final file = File('${tempDir.path}/test_room.jpg');
-                      await file.writeAsBytes(bytes);
-                      
-                      if (context.mounted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => FloorSelectionScreen(
-                              imagePath: file.path,
-                            ),
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Failed to load test image: $e'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  icon: const Icon(Icons.science),
-                  label: const Text('Test with Sample Image'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.purple,
-                    foregroundColor: Colors.white,
-                    padding: ResponsiveHelper.getButtonPadding(context),
+                // Hero Section - Modern Welcome Design
+                Container(
+                  padding: EdgeInsets.all(spacing * 2.5),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        theme.colorScheme.primary.withOpacity(0.1),
+                        theme.colorScheme.secondary.withOpacity(0.05),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(24),
                   ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.grid_view_rounded,
+                          size: 48,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      SizedBox(height: spacing * 2),
+                      Text(
+                        'Visualize Your\nDream Floor',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.displayMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                        ),
+                      ),
+                      SizedBox(height: spacing),
+                      Text(
+                        'See how tiles look in your space before you buy',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontSize: 15,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                SizedBox(height: spacing * 4),
+                
+                // Action Buttons - Modern Card Design
+                _buildActionCard(
+                  context: context,
+                  icon: Icons.camera_alt_rounded,
+                  title: 'Take Photo',
+                  subtitle: 'Capture your room with camera',
+                  onTap: () => _pickImage(context, ImageSource.camera),
+                  color: theme.colorScheme.primary,
+                ),
+                
+                SizedBox(height: spacing * 1.5),
+                
+                _buildActionCard(
+                  context: context,
+                  icon: Icons.photo_library_rounded,
+                  title: 'Choose from Gallery',
+                  subtitle: 'Select an existing photo',
+                  onTap: () => _pickImage(context, ImageSource.gallery),
+                  color: theme.colorScheme.secondary,
                 ),
                 
                 SizedBox(height: spacing * 2),
-                
-                // Take Photo button
-                Card(
-                  child: InkWell(
-                    onTap: () => _pickImage(context, ImageSource.camera),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: EdgeInsets.all(padding.left),
-                      height: ResponsiveHelper.getCardHeight(context),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.camera_alt,
-                            size: ResponsiveHelper.getIconSize(context) * 2,
-                            color: const Color(0xFF2196F3),
-                          ),
-                          SizedBox(height: spacing),
-                          Text(
-                            'Take Photo',
-                            style: TextStyle(
-                              fontSize: ResponsiveHelper.getFontSize(context, mobile: 18, tablet: 20, desktop: 22),
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF2196F3),
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Use your camera',
-                            style: TextStyle(
-                              fontSize: ResponsiveHelper.getFontSize(context, mobile: 12, tablet: 14, desktop: 16),
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                
-                SizedBox(height: spacing * 2),
-                
-                // Upload Photo button
-                Card(
-                  child: InkWell(
-                    onTap: () => _pickImage(context, ImageSource.gallery),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: EdgeInsets.all(padding.left),
-                      height: ResponsiveHelper.getCardHeight(context),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.photo_library,
-                            size: ResponsiveHelper.getIconSize(context) * 2,
-                            color: const Color(0xFF2196F3),
-                          ),
-                          SizedBox(height: spacing),
-                          Text(
-                            'Upload Photo',
-                            style: TextStyle(
-                              fontSize: ResponsiveHelper.getFontSize(context, mobile: 18, tablet: 20, desktop: 22),
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF2196F3),
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Choose from gallery',
-                            style: TextStyle(
-                              fontSize: ResponsiveHelper.getFontSize(context, mobile: 12, tablet: 14, desktop: 16),
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionCard({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    required Color color,
+  }) {
+    final spacing = ResponsiveHelper.getSpacing(context);
+    
+    return Card(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: EdgeInsets.all(spacing * 2),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  icon,
+                  size: 32,
+                  color: color,
+                ),
+              ),
+              SizedBox(width: spacing * 1.5),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 20,
+                color: Colors.grey.shade400,
+              ),
+            ],
           ),
         ),
       ),

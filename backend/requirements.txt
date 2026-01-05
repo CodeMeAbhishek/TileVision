@@ -12,3 +12,6 @@ httpx==0.25.1
 aiofiles==23.2.1
 scikit-image==0.22.0
 setuptools>=65.0.0
+# Security dependencies
+slowapi==0.1.9
+pydantic>=1.10.0,<3.0.0
