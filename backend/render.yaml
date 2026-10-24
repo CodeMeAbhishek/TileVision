@@ -1,8 +1,8 @@
 services:
   - type: web
     name: tilevision-backend
-    env: python
-    # NOTE: Python version must be set manually in Render Dashboard (Settings → Python Version → 3.11.9)
+    runtime: python
+    # NOTE: Python version must be set manually in Render Dashboard (Settings → Language Version → 3.11.9)
     # render.yaml doesn't support pythonVersion field, so set it in the dashboard UI
     buildCommand: pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -18,7 +18,7 @@ services:
       - key: ALLOWED_ORIGINS
         value: "*"  # CORS origins - use "*" for testing, specific domains for production
       - key: BASE_URL
-        value: https://tilevision.onrender.com  # Base URL for tile images
+        sync: false  # Set to the new Render service URL after first deploy
     healthCheckPath: /health
     plan: free
 

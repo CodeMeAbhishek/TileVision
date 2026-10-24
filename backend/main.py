@@ -92,7 +92,8 @@ MAX_FILE_SIZE = int(os.getenv("MAX_IMAGE_SIZE", 10)) * 1024 * 1024  # Default 10
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
 # Get base URL for tile images (works in both dev and production)
-BASE_URL = os.getenv("BASE_URL", "https://tilevision.onrender.com")
+# Production: set BASE_URL on Render to the new service URL
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 # Remove trailing slash if present
 BASE_URL = BASE_URL.rstrip("/")
 

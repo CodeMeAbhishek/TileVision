@@ -13,6 +13,9 @@ build/
 # Environment
 .env
 
+# Supabase CLI cache
+supabase/.temp/
+
 # IDE
 .vscode/
 .idea/

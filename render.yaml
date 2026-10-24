@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: tilevision-backend
+    runtime: python
+    rootDir: backend
+    # Set Python 3.11.9 in the Render dashboard (Settings → Language Version).
+    buildCommand: pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    plan: free
+    envVars:
+      - key: REPLICATE_API_TOKEN
+        sync: false
+      - key: DEBUG
+        value: "false"
+      - key: MAX_IMAGE_SIZE
+        value: "10"
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: BASE_URL
+        sync: false

@@ -5,31 +5,47 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../helpers/connectivity_helper.dart';
 
 class ApiService {
   // Base URL for the API - configurable
-  // Production: Render.com backend
-  // Development: 
+  // Production: API_BASE_URL from mobile/.env (new Render host)
+  // Development:
   //   - Android Emulator: 'http://10.0.2.2:8000'
   //   - Physical Device: 'http://YOUR_COMPUTER_IP:8000' (e.g., 'http://192.168.1.100:8000')
   //   - iOS Simulator: 'http://localhost:8000'
-  static String get _defaultBaseUrl {
-    // Auto-detect environment:
-    // - Debug mode (simulator/emulator): Use localhost for development
-    // - Release mode (APK builds): Use production URL
-    if (kDebugMode) {
-      // For Android emulator, use 10.0.2.2 to access host machine's localhost
-      if (Platform.isAndroid) {
-        return 'http://10.0.2.2:8000';
-      }
-      // For iOS simulator, localhost works directly
-      if (Platform.isIOS) {
-        return 'http://localhost:8000';
-      }
+  static String get _envApiBaseUrl {
+    try {
+      final value = (dotenv.env['API_BASE_URL'] ?? '').trim();
+      if (value.isEmpty) return '';
+      return value.endsWith('/') ? value.substring(0, value.length - 1) : value;
+    } catch (_) {
+      return '';
     }
-    // Production URL for release builds
-    return 'https://tilevision.onrender.com';
+  }
+
+  static String get _defaultBaseUrl {
+    // Debug builds talk to a local backend unless API_BASE_URL is set.
+    if (kDebugMode && _envApiBaseUrl.isEmpty) {
+      try {
+        if (Platform.isAndroid) {
+          return 'http://10.0.2.2:8000';
+        }
+        if (Platform.isIOS) {
+          return 'http://localhost:8000';
+        }
+      } catch (_) {
+        // Platform is unavailable on web; fall through to localhost.
+      }
+      return 'http://localhost:8000';
+    }
+
+    final configured = _envApiBaseUrl;
+    if (configured.isNotEmpty) {
+      return configured;
+    }
+    return 'http://localhost:8000';
   }
   
   final String baseUrl;
